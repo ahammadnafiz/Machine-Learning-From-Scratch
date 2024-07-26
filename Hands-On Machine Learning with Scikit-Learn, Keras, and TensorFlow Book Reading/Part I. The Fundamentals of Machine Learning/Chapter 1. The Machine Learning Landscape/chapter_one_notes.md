@@ -1,6 +1,6 @@
 # What is Machine Learning?
  
-- *[Machine learning is the] field of study that gives computers the ability to learn without being explicitly programmed
+- [``Machine learning`` is the] field of study that gives computers the ability to learn without being explicitly programmed
 
 ## Supervised learning
  - In supervised learning, the training set you feed to the algorithm includes the desired solutions, called labels (classification, regression)
