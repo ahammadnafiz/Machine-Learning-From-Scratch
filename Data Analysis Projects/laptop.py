@@ -1,146 +1,130 @@
+import time
 from selenium import webdriver
 from selenium.webdriver.edge.service import Service
+from selenium.webdriver.edge.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
-import csv
-import time
-import os
+from bs4 import BeautifulSoup
+import pandas as pd
 
-def setup_driver():
-    options = webdriver.EdgeOptions()
-    options.add_argument('--headless')
-    options.add_argument('--disable-gpu')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--log-level=3')  # fatal onlys
-    options.add_experimental_option('excludeSwitches', ['enable-logging'])
-    
-    service = Service('C:/edgedriver_win64/msedgedriver.exe')  # Update this path
-    
-    if os.name == 'posix':  # for Mac/Linux
-        return webdriver.Edge(service=service, options=options, service_args=['--quiet'])
-    elif os.name == 'nt':  # for Windows
-        return webdriver.Edge(service=service, options=options)
+# Set up Microsoft Edge WebDriver
+edge_options = Options()
+edge_options.use_chromium = True
+edge_service = Service('C:/edgedriver_win64/msedgedriver.exe')
+driver = webdriver.Edge(service=edge_service, options=edge_options)
 
-def extract_product_info(driver, url):
+# Function to scrape laptop details from a single page
+def scrape_laptop_details(url):
     driver.get(url)
-    
-    try:
-        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "productTitle")))
-    except TimeoutException:
-        print(f"Timeout waiting for page to load: {url}")
-        return None
+    time.sleep(2)  # Wait for the page to load
 
-    product = {}
-    
-    # Extract title
-    product['title'] = driver.find_element(By.ID, "productTitle").text.strip()
-    
-    # Extract price
-    try:
-        price_element = driver.find_element(By.CLASS_NAME, "a-price-whole")
-        price_fraction = driver.find_element(By.CLASS_NAME, "a-price-fraction")
-        product['price'] = f"{price_element.text}.{price_fraction.text}"
-    except NoSuchElementException:
-        product['price'] = "N/A"
-    
-    # Extract details from the product details section
-    details_to_extract = [
-        "Standing screen display size", "Screen Resolution", "Processor", "RAM", 
-        "Hard Drive", "Graphics Coprocessor", "Chipset Brand", "Wireless Type", 
-        "Average Battery Life (in hours)", "Brand", "Series", "Operating System", 
-        "Item Weight", "Color", "Processor Brand", "Number of Processors", "Batteries"
-    ]
-    
-    for section_id in ["productDetails_techSpec_section_1", "productDetails_techSpec_section_2"]:
-        try:
-            details_section = driver.find_element(By.ID, section_id)
-            rows = details_section.find_elements(By.TAG_NAME, "tr")
-            for row in rows:
-                try:
-                    key = row.find_element(By.TAG_NAME, "th").text.strip()
-                    if key in details_to_extract:
-                        value = row.find_element(By.TAG_NAME, "td").text.strip()
-                        product[key] = value
-                except NoSuchElementException:
-                    continue
-        except NoSuchElementException:
-            print(f"Could not find product details section {section_id} for: {url}")
-    
-    return product
+    # Wait for the main content to be present
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.CLASS_NAME, "container"))
+    )
 
-def scrape_laptops(base_url, num_pages):
-    driver = setup_driver()
-    laptops = []
-    page = 1
+    soup = BeautifulSoup(driver.page_source, 'html.parser')
 
-    while page <= num_pages:
-        url = f"{base_url}&page={page}"
-        driver.get(url)
-        print(f"Scraping page {page}")
+    # Extract the title
+    title = soup.find('h1').string.strip() if soup.find('h1') else 'N/A'
+
+    # Function to safely extract text from <td> elements
+    def find_td_value(label):
+        td = soup.find('td', string=lambda text: text and label.lower() in text.lower())
+        return td.find_next('td').text.strip() if td else 'N/A'
+
+    # Function to extract specification table details more robustly
+    def get_spec(soup, spec_name):
+        # Locate the <thead> or <td> with the specification name
+        thead_or_td = soup.find(lambda tag: tag.name in ['thead', 'td'] and spec_name.lower() in tag.get_text(strip=True).lower())
         
-        try:
-            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.s-main-slot")))
-        except TimeoutException:
-            print(f"Timeout waiting for page {page} to load")
-            page += 1
-            continue
+        # If found, extract the next attribute details within the <tbody>
+        if thead_or_td:
+            next_td = thead_or_td.find_next('td', class_='attribute-value')
+            return next_td.get_text(strip=True) if next_td else 'N/A'
+        return 'N/A'
 
-        laptop_links = driver.find_elements(By.CSS_SELECTOR, "a.a-link-normal.s-underline-text.s-underline-link-text.s-link-style.a-text-normal")
-        links = [link.get_attribute('href') for link in laptop_links if link.get_attribute('href')]
+    # Extract product details
+    product_price = find_td_value('product price')
+    stock_status = find_td_value('Stock Status')
+    product_model = find_td_value('Product model')
+    warranty = find_td_value('Warranty')
 
-        for i, link in enumerate(links, 1):
-            print(f"Scraping laptop {i} of {len(links)} on page {page}")
-            laptop_info = extract_product_info(driver, link)
-            if laptop_info:
-                laptops.append(laptop_info)
-            time.sleep(2)  # Delay to be respectful to the website
+    # Extract Brand details
+    brand = find_td_value('Brand')  # Assuming Brand is located in a different table.
 
-        page += 1
-        time.sleep(3)  # Additional delay between pages
+    # Extract Processor, Memory, Graphics, Display and Battery details
+    processor = f"{get_spec(soup, 'Processor Model')} {get_spec(soup, 'Processor Speed')}"
+    memory = f"{get_spec(soup, 'Memory Size')} {get_spec(soup, 'Memory Type')}"
+    display = f"{get_spec(soup, 'Screen Size')} {get_spec(soup, 'Resolution')}"
+    graphics = f"{get_spec(soup, 'GPU Chipset')} {get_spec(soup, 'GPU Memory Size')}"
+    battery = f"{get_spec(soup, 'Battery Type')} {get_spec(soup, 'Battery capacity')}"
 
-        # Check if we've reached the last page
-        next_button = driver.find_elements(By.CSS_SELECTOR, ".s-pagination-item.s-pagination-next")
-        if not next_button or "a-disabled" in next_button[0].get_attribute("class"):
-            print("Reached the last page. Stopping scraping.")
-            break
-
-    driver.quit()
-    return laptops
-
-def save_to_csv(laptops, filename='laptops.csv'):
-    if not laptops:
-        print("No data to save.")
-        return
-
-    keys = [
-        "title", "price", "Standing screen display size", "Screen Resolution", 
-        "Processor", "RAM", "Hard Drive", "Graphics Coprocessor", "Chipset Brand", 
-        "Wireless Type", "Average Battery Life (in hours)", "Brand", "Series", 
-        "Operating System", "Item Weight", "Color", "Processor Brand", 
-        "Number of Processors", "Batteries"
-    ]
     
-    with open(filename, 'w', newline='', encoding='utf-8') as output_file:
-        dict_writer = csv.DictWriter(output_file, fieldnames=keys)
-        dict_writer.writeheader()
-        dict_writer.writerows(laptops)
+    # Extract specifications
+    # processor = get_spec('Processor Model')
+    # memory = get_spec('Memory Size')
+    storage = get_spec('Storage')
+    # display = f"{get_spec('Screen Size')} {get_spec('Resolution')}"
+    # graphics = get_spec('GPU Chipset')
+    webcam = get_spec('WebCam')
+    keyboard = get_spec('Keyboard')
+    networking = f"WiFi: {get_spec('WiFi')}, Bluetooth: {get_spec('Bluetooth')}"
+    adapter = get_spec('Adapter')
+    # battery = get_spec('Battery capacity')
+    color = get_spec('Color')
+    weight = get_spec('Weight')
+    brand = get_spec('Brand')
+    operating_system = get_spec('Operating System')
 
-    print(f"Data saved to {filename}")
+    # Return the collected details as a dictionary
+    return {
+        'Title': title,
+        'Product Price': product_price,
+        'Stock Status': stock_status,
+        'Product Model': product_model,
+        'Warranty': warranty,
+        'Processor': processor,
+        'Memory': memory,
+        'Storage': storage,
+        'Display': display,
+        'Graphics': graphics,
+        'WebCam': webcam,
+        'Keyboard': keyboard,
+        'Networking': networking,
+        'Adapter': adapter,
+        'Battery': battery,
+        'Color': color,
+        'Weight': weight,
+        'Brand': brand,
+        'Operating System': operating_system
+    }
 
-if __name__ == "__main__":
-    base_url = "https://www.amazon.com/s?k=laptop"
-    while True:
-        try:
-            num_pages = int(input("Enter the number of pages to scrape (each page contains up to 16 laptops): "))
-            if num_pages > 0:
-                break
-            else:
-                print("Please enter a positive number.")
-        except ValueError:
-            print("Please enter a valid number.")
-    
-    laptops = scrape_laptops(base_url, num_pages)
-    save_to_csv(laptops)
+# Main scraping loop
+base_url = 'https://www.techlandbd.com/brand-laptops?page='
+all_laptops = []
+
+for page in range(1, 2):  # Adjust range based on the number of pages
+    print(f"Scraping page {page}...")
+    driver.get(f"{base_url}{page}")
+    time.sleep(2)  # Wait for the page to load
+
+    # Find all laptop links on the current page
+    laptop_links = driver.find_elements(By.CSS_SELECTOR, "div.name a")
+    laptop_urls = [link.get_attribute('href') for link in laptop_links]
+
+    # Scrape details for each laptop
+    for url in laptop_urls:
+        laptop_details = scrape_laptop_details(url)
+        all_laptops.append(laptop_details)
+        time.sleep(1)  # Be polite to the server
+
+# Create a pandas DataFrame and save to CSV
+df = pd.DataFrame(all_laptops)
+df.to_csv('laptop_data.csv', index=False)
+
+# Close the browser
+driver.quit()
+
+print("Scraping completed. Data saved to laptop_data.csv")
