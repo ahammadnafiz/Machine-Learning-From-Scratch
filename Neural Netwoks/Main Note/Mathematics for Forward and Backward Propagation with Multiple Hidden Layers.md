@@ -66,14 +66,14 @@ $$
 1. **Input Layer → Hidden Layer 1**:
    
 $$
-   Z[1] = W[1]X + b[1], \quad A[1] = g_{	ext{ReLU}}(Z[1])
+   Z[1] = W[1]X + b[1], \quad A[1] = g_{\text{ReLU}}}(Z[1])
 $$
    
    
 2. **Hidden Layer 1 → Hidden Layer 2**:
    
 $$
-   Z[2] = W[2]A[1] + b[2], \quad A[2] = g_{	ext{ReLU}}(Z[2])
+   Z[2] = W[2]A[1] + b[2], \quad A[2] = g_{\text{ReLU}}(Z[2])
 $$
    
 
@@ -119,13 +119,13 @@ $$
    For each hidden layer \( l = N, N-1, ..., 1 \):
    
 $$
-   dZ[l] = W[l+1]^T dZ[l+1] \cdot g'[ReLU](Z[l])
+   dZ[l] = W[l+1]^T dZ[l+1] \cdot g_{\text{ReLU}}(Z[l])
 $$
    
-   - Here  $g'[ReLU](Z[l])$ is the derivative of the ReLU activation function:
+   - Here  $g_{\text{ReLU}}(Z[l])$ is the derivative of the ReLU activation function:
  
 $$
-     g'[ReLU](Z[l]) = \begin{cases}
+     g_{\text{ReLU}}(Z[l]) = \begin{cases}
      1 & \text{if } Z[l] > 0 \\
      0 & \text{if } Z[l] \leq 0
      \end{cases}
@@ -156,14 +156,14 @@ $$
 2. **Hidden Layer 2**:
    
 $$
-   dZ[2] = W[3]^T dZ[3] \cdot g'[ReLU](Z[2]), \quad dW[2] = \frac{1}{m} dZ[2] A[1]^T, \quad db[2] = \frac{1}{m} \sum_{i=1}^{m} dZ[2]
+   dZ[2] = W[3]^T dZ[3] \cdot g_{\text{ReLU}}(Z[2]), \quad dW[2] = \frac{1}{m} dZ[2] A[1]^T, \quad db[2] = \frac{1}{m} \sum_{i=1}^{m} dZ[2]
 $$
    
 
 3. **Hidden Layer 1**:
    
 $$
-   dZ[1] = W[2]^T dZ[2] \cdot g'[ReLU](Z[1]), \quad dW[1] = \frac{1}{m} dZ[1] X^T, \quad db[1] = \frac{1}{m} \sum_{i=1}^{m} dZ[1]
+   dZ[1] = W[2]^T dZ[2] \cdot g_{\text{ReLU}}(Z[1]), \quad dW[1] = \frac{1}{m} dZ[1] X^T, \quad db[1] = \frac{1}{m} \sum_{i=1}^{m} dZ[1]
 $$
    
 
@@ -202,7 +202,7 @@ $$
 
 
 $$
-A[l] = g_{	ext{ReLU}}(Z[l])
+A[l] = g_{\text{ReLU}}(Z[l])
 $$
 
 For the output layer \( L = N+1 \):
@@ -237,7 +237,7 @@ $$
 2. For each hidden layer \( l = N, N-1, ..., 1 \):
    
 $$
-   dZ[l] = W[l+1]^T dZ[l+1] \cdot g'[ReLU](Z[l])
+   dZ[l] = W[l+1]^T dZ[l+1] \cdot g_{\text{ReLU}}(Z[l])
 $$
    
    
@@ -338,7 +338,7 @@ $$
 
 ### **2. Backward Propagation Shapes**
 
-During the backward pass, we compute the gradients of the cost function with respect to the weights, biases, and activations. The shapes of these variables are as follows:
+During the backward pass, we compute the gradients of the cost function concerning the weights, biases, and activations. The shapes of these variables are as follows:
 
 1. **Output Layer** \( $l = L = N+1$ \):
    - **Gradient of Loss with respect to \( Z[L] \)**:
@@ -364,7 +364,7 @@ $$
    - **Gradient of Loss with respect to \( Z[l] \)**:
  
 $$
-     dZ[l] = W[l+1]^T dZ[l+1] \cdot g'[ReLU](Z[l]) \quad \Rightarrow \quad dZ[l] \in \mathbb{R}^{n_l \times m}
+     dZ[l] = W[l+1]^T dZ[l+1] \cdot g_{\text{ReLU}}(Z[l]) \quad \Rightarrow \quad dZ[l] \in \mathbb{R}^{n_l \times m}
 $$
  
    - **Weight Gradient**:
