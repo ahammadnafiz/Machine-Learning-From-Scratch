@@ -51,9 +51,9 @@ $$
    - For hidden layers, typically use **ReLU**:
  
 $$
-     g_[RelU](Z[l]) = \max(0, Z[l])
+     g_{\text{ReLU}}(Z^{[l]}) = \max(0, Z^{[l]})
 $$
- 
+
    - For the output layer, typically use **softmax** for classification:
  
 $$
