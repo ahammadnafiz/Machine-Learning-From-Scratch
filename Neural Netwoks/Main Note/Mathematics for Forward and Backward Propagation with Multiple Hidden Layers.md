@@ -51,7 +51,7 @@ $$
    - For hidden layers, typically use **ReLU**:
  
 $$
-     g_{ReLU}(Z[l]) = \max(0, Z[l])
+     g_[RelU](Z[l]) = \max(0, Z[l])
 $$
  
    - For the output layer, typically use **softmax** for classification:
@@ -66,14 +66,14 @@ $$
 1. **Input Layer → Hidden Layer 1**:
    
 $$
-   Z[1] = W[1]X + b[1], \quad A[1] = g_{ReLU}(Z[1])
+   Z[1] = W[1]X + b[1], \quad A[1] = g_[RelU](Z[1])
 $$
    
    
 2. **Hidden Layer 1 → Hidden Layer 2**:
    
 $$
-   Z[2] = W[2]A[1] + b[2], \quad A[2] = g_{ReLU}(Z[2])
+   Z[2] = W[2]A[1] + b[2], \quad A[2] = g_[RelU](Z[2])
 $$
    
 
@@ -202,7 +202,7 @@ $$
 
 
 $$
-A[l] = g_{ReLU}(Z[l])
+A[l] = g_[RelU](Z[l])
 $$
 
 For the output layer \( L = N+1 \):
