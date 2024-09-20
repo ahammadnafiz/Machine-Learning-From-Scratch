@@ -66,7 +66,7 @@ $$
 1. **Input Layer → Hidden Layer 1**:
    
 $$
-   Z[1] = W[1]X + b[1], \quad A[1] = g_{\text{ReLU}}}(Z[1])
+   Z[1] = W[1]X + b[1], \quad A[1] = g_{\text{ReLU}}(Z[1])
 $$
    
    
