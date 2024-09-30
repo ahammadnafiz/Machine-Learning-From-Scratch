@@ -63,7 +63,7 @@ class NN:
 
         # Output layer
         dZL = AL - Y
-        A_prev, WL, bL, ZL = caches[self.L - 1]
+        A_prev, WL, bL, ZL = caches[self.L - 1] 
         grads[f'dW{self.L}'] = (1/m) * np.dot(dZL, A_prev.T)
         grads[f'db{self.L}'] = (1/m) * np.sum(dZL, axis=1, keepdims=True)
         dA_prev = np.dot(WL.T, dZL)
