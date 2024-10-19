@@ -30,8 +30,10 @@ class KNN:
             # prediction = np.mean(k_y_value) # for regression model
             # predictions.append(prediction)
 
-            # Use majority voting to get the predicted class
             majority_vote = Counter(k_y_value).most_common(1)[0][0]
+
+            # Use majority voting to get the predicted class
             predictions.append(majority_vote)
 
+           
         return predictions
