@@ -39,9 +39,9 @@ class NN:
             A_prev = A
             W = self.parameters[f'W{l}']
             b = self.parameters[f'b{l}']
-            
+
             Z = np.dot(W, A_prev) + b
-            
+
             if l == self.L:  # Output layer
                 A = self.softmax(Z)
             else:
