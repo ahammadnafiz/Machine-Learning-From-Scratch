@@ -14,18 +14,18 @@ import matplotlib.pyplot as plt
 np.random.seed(42)
 
 # Generate synthetic dataset with higher noise
-def generate_dataset(n_samples=1000, n_features=3, noise=0.5):
+def generate_dataset(n_samples=500, n_features=3, noise=0.132):
     """
     Generate a synthetic dataset with linear relationships and higher noise.
     """
     true_coefficients = np.random.randn(n_features)
-    true_intercept = np.random.randn()
+    true_intercept = 1.1 * np.random.randn()
     
     # Generate feature matrix with some non-linear relationships
-    X = np.random.randn(n_samples, n_features)
+    X = 1.1 * np.random.randn(n_samples, n_features)
 
     # Add polynomial features (squared terms) for non-linearity
-    X_poly = np.column_stack((X, X**2))
+    X_poly = np.column_stack((X** 2, 0.5 * X ** 2 + X + 0.3))
     
     # Generate target values with higher noise
     y = np.dot(X_poly, np.concatenate((true_coefficients, np.random.randn(n_features)))) + true_intercept
@@ -49,17 +49,17 @@ X_test_scaled = scaler.transform(X_test)
 # Train custom implementation with improved hyperparameters
 custom_model = LinearRegressionScratch(
     learning_rate=0.1,
-    epochs=2000,
-    batch_size=64,
+    epochs=1000,
+    batch_size=32,
     validation_split=0.2,
-    tolerance=1e-6,
-    patience=50,
+    tolerance=1e-5,
+    patience=80,
     decay=0.995,
     regularization=1e-4,
     regularization_type='L2',
     decay_type='exponential',
-    verbose=200,
-    clip_value=1.0,
+    verbose=100,
+    clip_value=1.1,
     random_state=42
 )
 custom_model.fit(X_train_scaled, y_train)

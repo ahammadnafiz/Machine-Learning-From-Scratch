@@ -17,12 +17,12 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
         validation_split: float = 0.2,
         regularization: float = 1e-4,
         regularization_type: Literal['L1', 'L2'] = 'L2',
-        decay_type: Literal['exponential', 'inverse_time', 'adaptive'] = 'adaptive',
+        decay_type: Literal['exponential', 'inverse_time', 'adaptive'] = 'exponential',
         momentum: float = 0.9,
         verbose: int = 0,
         clip_value: Optional[float] = 1.0,
         random_state: Optional[int] = None,
-        epsilon: float = 1e-4
+        epsilon: float = 1e-8
     ):
         """
         Initialize the Linear Regression model with improved parameters.
@@ -122,7 +122,8 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
         m = X.shape[0]
         
         # Compute MSE loss and gradients with numerical stability
-        loss = np.mean((y - y_pred) ** 2)
+        residuals = y - y_pred
+        loss = np.mean(np.square(residuals))
         dw = (-2 / m) * np.dot(X.T, (y - y_pred))
         db = (-2 / m) * np.sum(y - y_pred)
         
@@ -148,12 +149,15 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
             current_loss: Current loss value (for adaptive decay)
             prev_loss: Previous loss value (for adaptive decay)
         """
+        if self.learning_rate < 1e-10:
+            self.learning_rate = 1e-10
+        
         if self.decay_type == 'exponential':
             return self.learning_rate * (self.decay ** t)
         elif self.decay_type == 'inverse_time':
             t0, t1 = 200, 1000  # hyperparameters for inverse time decay
             return self.learning_rate * t0 / (t + t1)
-        else:  # adaptive
+        else:  # adaptive  
             if current_loss is not None and prev_loss is not None:
                 if current_loss > prev_loss:
                     self.learning_rate *= self.decay
@@ -184,6 +188,29 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
         self.b = 0
         self.velocity_w = np.zeros_like(self.w)
         self.velocity_b = 0
+        
+    def _compute_relative_improvement(self, best_loss: float, val_loss: float) -> float:
+        """
+        Compute relative improvement with enhanced numerical stability.
+        
+        Args:
+            best_loss: Previous best validation loss
+            val_loss: Current validation loss
+            
+        Returns:
+            float: Relative improvement value
+        """
+        # Ensure inputs are finite and non-negative
+        if not (np.isfinite(best_loss) and np.isfinite(val_loss)):
+            return 0.0
+            
+        if best_loss < 0 or val_loss < 0:
+            return 0.0
+            
+        # Use max to ensure denominator is never too close to zero
+        denominator = max(abs(best_loss) + self.epsilon, self.epsilon)
+        
+        return (best_loss - val_loss) / denominator
 
     def fit(self, X: Union[np.ndarray, list], y: Union[np.ndarray, list]) -> 'LinearRegressionScratch':
         """
@@ -268,9 +295,10 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
             self.history.append(avg_epoch_loss)
             self.val_history.append(val_loss)
             
-            # Early stopping with relative improvement check
+            # Early stopping with improved relative improvement check
             if val_loss < best_loss:
-                relative_improvement = (best_loss - val_loss) / (best_loss + self.epsilon)
+                relative_improvement = self._compute_relative_improvement(best_loss, val_loss)
+                
                 if relative_improvement < self.tolerance:
                     no_improvement_count += 1
                 else:
@@ -314,34 +342,6 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
             
         return np.dot(X, self.w) + self.b
 
-    def score(self, X: Union[np.ndarray, list], y: Union[np.ndarray, list]) -> float:
-        """
-        Calculate R-squared score for the model.
-        
-        Args:
-            X: Test features
-            y: Test targets
-        """
-        if not self._is_fitted:
-            raise NotFittedError(
-                "This LinearRegressionScratch instance is not fitted yet. "
-                "Call 'fit' with appropriate arguments before using this estimator."
-            )
-            
-        X = np.array(X, dtype=np.float64)
-        y = np.array(y, dtype=np.float64)
-        
-        if X.ndim != 2:
-            raise ValueError("X must be a 2-dimensional array")
-        if y.ndim != 1:
-            raise ValueError("y must be a 1-dimensional array")
-        if len(X) != len(y):
-            raise ValueError("X and y must have the same number of samples")
-            
-        y_pred = self.predict(X)
-        u = np.sum((y - y_pred) ** 2)
-        v = np.sum((y - np.mean(y)) ** 2)
-        return 1 - (u / v) if v != 0 else 0.0
     
     def learning_curve(self, figsize: Tuple[int, int] = (10, 6)) -> None:
         """
