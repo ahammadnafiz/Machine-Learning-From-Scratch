@@ -10,20 +10,22 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
         self,
         learning_rate: float = 0.01,
         epochs: int = 1000,
-        tolerance: float = 1e-4,
-        patience: int = 10,
-        batch_size: Optional[int] = None,
-        decay: float = 0.99,
+        tolerance: float = 1e-6,
+        patience: int = 50,
+        batch_size: Optional[int] = 64,
+        decay: float = 0.995,
         validation_split: float = 0.2,
-        regularization: float = 0.0,
+        regularization: float = 1e-4,
         regularization_type: Literal['L1', 'L2'] = 'L2',
-        decay_type: Literal['exponential', 'inverse_time'] = 'exponential',
+        decay_type: Literal['exponential', 'inverse_time', 'adaptive'] = 'adaptive',
+        momentum: float = 0.9,
         verbose: int = 0,
-        clip_value: Optional[float] = None,
-        random_state: Optional[int] = None
+        clip_value: Optional[float] = 1.0,
+        random_state: Optional[int] = None,
+        epsilon: float = 1e-4
     ):
         """
-        Initialize the Linear Regression model.
+        Initialize the Linear Regression model with improved parameters.
         
         Args:
             learning_rate: Initial learning rate for gradient descent
@@ -35,17 +37,20 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
             validation_split: Fraction of data to use for validation
             regularization: Regularization strength
             regularization_type: Type of regularization ('L1' or 'L2')
-            decay_type: Type of learning rate decay ('exponential' or 'inverse_time')
+            decay_type: Type of learning rate decay ('exponential', 'inverse_time', or 'adaptive')
+            momentum: Momentum coefficient for gradient descent
             verbose: Print training progress every verbose epochs
             clip_value: Maximum absolute value for gradient clipping
             random_state: Random seed for reproducibility
+            epsilon: Small constant to prevent division by zero
         """
         self._validate_inputs(
             learning_rate, epochs, tolerance, patience, 
-            validation_split, regularization, decay
+            validation_split, regularization, decay, momentum
         )
         
         self.learning_rate = learning_rate
+        self.initial_learning_rate = learning_rate
         self.epochs = epochs
         self.tolerance = tolerance
         self.patience = patience
@@ -55,13 +60,17 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
         self.regularization = regularization
         self.regularization_type = regularization_type
         self.decay_type = decay_type
+        self.momentum = momentum
         self.verbose = verbose
         self.clip_value = clip_value
         self.random_state = random_state
+        self.epsilon = epsilon
         
         # Initialize model parameters
         self.w = None
         self.b = None
+        self.velocity_w = None
+        self.velocity_b = None
         self.history = []
         self.val_history = []
         self._is_fitted = False
@@ -74,9 +83,10 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
         patience: int,
         validation_split: float,
         regularization: float,
-        decay: float
+        decay: float,
+        momentum: float
     ) -> None:
-        """Validate input parameters."""
+        """Validate input parameters with improved error messages."""
         if not isinstance(learning_rate, (int, float)) or learning_rate <= 0:
             raise ValueError("learning_rate must be a positive number")
         if not isinstance(epochs, int) or epochs <= 0:
@@ -89,8 +99,10 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
             raise ValueError("validation_split must be a float between 0 and 1")
         if not isinstance(regularization, (int, float)) or regularization < 0:
             raise ValueError("regularization must be non-negative")
-        if not isinstance(decay, float) or not 0 < decay < 1:
+        if not isinstance(decay, float) or not 0 < decay <= 1:
             raise ValueError("decay must be a float between 0 and 1")
+        if not isinstance(momentum, float) or not 0 <= momentum < 1:
+            raise ValueError("momentum must be a float between 0 and 1")
 
     def _compute_loss(
         self,
@@ -99,20 +111,17 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
         include_regularization: bool = True
     ) -> Tuple[float, np.ndarray, float]:
         """
-        Compute the loss, gradients for weights and bias.
+        Compute the loss and gradients with improved numerical stability.
         
         Args:
             X: Input features
             y: Target values
             include_regularization: Whether to include regularization term
-            
-        Returns:
-            tuple: (loss, weight gradients, bias gradient)
         """
-        y_pred = np.dot(X, self.w) + self.b  # Using direct computation instead of predict()
+        y_pred = np.dot(X, self.w) + self.b
         m = X.shape[0]
         
-        # Compute MSE loss and gradients
+        # Compute MSE loss and gradients with numerical stability
         loss = np.mean((y - y_pred) ** 2)
         dw = (-2 / m) * np.dot(X.T, (y - y_pred))
         db = (-2 / m) * np.sum(y - y_pred)
@@ -127,37 +136,64 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
             
             loss += reg_loss
             dw += reg_dw
-            
-        return loss, dw, db
+        
+        return loss + self.epsilon, dw, db
 
-    def _learning_schedule(self, t: int) -> float:
+    def _learning_schedule(self, t: int, current_loss: float = None, prev_loss: float = None) -> float:
         """
-        Compute learning rate based on schedule type and current iteration.
+        Compute learning rate based on schedule type and current state.
         
         Args:
             t: Current iteration number
-            
-        Returns:
-            float: Current learning rate
+            current_loss: Current loss value (for adaptive decay)
+            prev_loss: Previous loss value (for adaptive decay)
         """
         if self.decay_type == 'exponential':
             return self.learning_rate * (self.decay ** t)
-        else:  # inverse_time
+        elif self.decay_type == 'inverse_time':
             t0, t1 = 200, 1000  # hyperparameters for inverse time decay
             return self.learning_rate * t0 / (t + t1)
+        else:  # adaptive
+            if current_loss is not None and prev_loss is not None:
+                if current_loss > prev_loss:
+                    self.learning_rate *= self.decay
+                elif current_loss < prev_loss * (1 - self.tolerance):
+                    self.learning_rate = min(self.learning_rate / self.decay, self.initial_learning_rate)
+            return self.learning_rate
+
+    def _get_batch_indices(self, n_samples: int) -> np.ndarray:
+        """
+        Generate mini-batch indices with improved shuffling.
+        
+        Args:
+            n_samples: Number of samples in dataset
+        """
+        indices = np.random.permutation(n_samples)
+        n_batches = (n_samples + self.batch_size - 1) // self.batch_size
+        return np.array_split(indices, n_batches)
+
+    def _initialize_parameters(self, n_features: int) -> None:
+        """
+        Initialize model parameters using Xavier/Glorot initialization.
+        
+        Args:
+            n_features: Number of input features
+        """
+        limit = np.sqrt(6 / (n_features + 1))
+        self.w = np.random.uniform(-limit, limit, n_features)
+        self.b = 0
+        self.velocity_w = np.zeros_like(self.w)
+        self.velocity_b = 0
 
     def fit(self, X: Union[np.ndarray, list], y: Union[np.ndarray, list]) -> 'LinearRegressionScratch':
         """
-        Fit the linear regression model using gradient descent.
+        Fit the linear regression model using improved gradient descent.
         
         Args:
             X: Training features
             y: Training targets
-            
-        Returns:
-            self: The fitted model
         """
-        # Convert inputs to numpy arrays if they're lists
+        # Convert inputs to numpy arrays
         X = np.array(X, dtype=np.float64)
         y = np.array(y, dtype=np.float64)
         
@@ -174,7 +210,7 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
             
         n_samples, n_features = X.shape
         
-        # Ensure we have enough samples for validation
+        # Ensure enough samples for validation
         min_train_samples = 2
         if n_samples < min_train_samples / (1 - self.validation_split):
             raise ValueError(
@@ -189,53 +225,52 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
         y_train, y_val = y[indices[:split_idx]], y[indices[split_idx:]]
         
         # Initialize parameters
-        self.w = np.zeros(n_features)
-        self.b = 0
+        self._initialize_parameters(n_features)
         self.history = []
         self.val_history = []
         
         best_loss = float('inf')
         no_improvement_count = 0
-        batch_size = self.batch_size or n_samples
-        n_batches = ceil(len(X_train) / batch_size)
+        prev_loss = None
         
         for epoch in range(self.epochs):
-            # Shuffle training data
-            shuffle_idx = np.random.permutation(len(X_train))
-            X_train_shuffled = X_train[shuffle_idx]
-            y_train_shuffled = y_train[shuffle_idx]
+            # Get batch indices
+            batch_indices = self._get_batch_indices(len(X_train))
             
             epoch_loss = 0
-            for i in range(n_batches):
-                start_idx = i * batch_size
-                end_idx = min(start_idx + batch_size, len(X_train))
-                X_batch = X_train_shuffled[start_idx:end_idx]
-                y_batch = y_train_shuffled[start_idx:end_idx]
+            for batch_idx in batch_indices:
+                X_batch = X_train[batch_idx]
+                y_batch = y_train[batch_idx]
                 
                 # Compute gradients
                 batch_loss, dw, db = self._compute_loss(X_batch, y_batch)
                 epoch_loss += batch_loss
                 
-                # Apply gradient clipping if specified
+                # Apply gradient clipping
                 if self.clip_value is not None:
                     dw = np.clip(dw, -self.clip_value, self.clip_value)
                     db = np.clip(db, -self.clip_value, self.clip_value)
                 
-                # Update parameters
-                lr = self._learning_schedule(epoch * n_batches + i)
-                self.w -= lr * dw
-                self.b -= lr * db
+                # Update learning rate
+                lr = self._learning_schedule(epoch, batch_loss, prev_loss)
+                prev_loss = batch_loss
+                
+                # Update parameters with momentum
+                self.velocity_w = self.momentum * self.velocity_w - lr * dw
+                self.velocity_b = self.momentum * self.velocity_b - lr * db
+                self.w += self.velocity_w
+                self.b += self.velocity_b
             
             # Compute average epoch loss and validation loss
-            avg_epoch_loss = epoch_loss / n_batches
+            avg_epoch_loss = epoch_loss / len(batch_indices)
             val_loss, _, _ = self._compute_loss(X_val, y_val, include_regularization=False)
             
             self.history.append(avg_epoch_loss)
             self.val_history.append(val_loss)
             
-            # Early stopping check
+            # Early stopping with relative improvement check
             if val_loss < best_loss:
-                relative_improvement = (best_loss - val_loss) / best_loss
+                relative_improvement = (best_loss - val_loss) / (best_loss + self.epsilon)
                 if relative_improvement < self.tolerance:
                     no_improvement_count += 1
                 else:
@@ -251,7 +286,7 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
                 
             if self.verbose > 0 and epoch % self.verbose == 0:
                 print(f"Epoch {epoch + 1}, Training Loss: {avg_epoch_loss:.4f}, "
-                      f"Validation Loss: {val_loss:.4f}")
+                      f"Validation Loss: {val_loss:.4f}, Learning Rate: {lr:.6f}")
         
         self._is_fitted = True
         return self
@@ -262,9 +297,6 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
         
         Args:
             X: Input features
-            
-        Returns:
-            np.ndarray: Predicted values
         """
         if not self._is_fitted:
             raise NotFittedError(
@@ -289,9 +321,6 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
         Args:
             X: Test features
             y: Test targets
-            
-        Returns:
-            float: R-squared score
         """
         if not self._is_fitted:
             raise NotFittedError(
@@ -313,10 +342,10 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
         u = np.sum((y - y_pred) ** 2)
         v = np.sum((y - np.mean(y)) ** 2)
         return 1 - (u / v) if v != 0 else 0.0
-
+    
     def learning_curve(self, figsize: Tuple[int, int] = (10, 6)) -> None:
         """
-        Plot the learning curves showing training and validation loss over epochs.
+        Plot the learning curves with improved visualization.
         
         Args:
             figsize: Figure size as (width, height)
@@ -328,11 +357,14 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
             )
             
         plt.figure(figsize=figsize)
-        plt.plot(self.history, label="Training Loss")
-        plt.plot(self.val_history, label="Validation Loss")
-        plt.xlabel("Epochs")
-        plt.ylabel("Loss")
-        plt.title("Learning Curves")
+        epochs = range(1, len(self.history) + 1)
+        
+        plt.plot(epochs, self.history, 'b-', label='Training Loss', linewidth=2)
+        plt.plot(epochs, self.val_history, 'r-', label='Validation Loss', linewidth=2)
+        
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.title('Learning Curves')
         plt.legend()
         plt.grid(True)
         plt.show()
