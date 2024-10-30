@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from sklearn.exceptions import NotFittedError
 from typing import Optional, Literal, Tuple, Union
 
-class LinearRegressionScratch(BaseEstimator, RegressorMixin):
+class LinearModel(BaseEstimator, RegressorMixin):
     def __init__(
         self,
         learning_rate: float = 0.01,
@@ -129,7 +129,7 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
         
         if include_regularization and self.regularization > 0:
             if self.regularization_type == 'L2':
-                reg_loss = 0.5 * self.regularization * np.sum(self.w ** 2)
+                reg_loss = 0.5 * self.regularization * np.sum(np.square(self.w))
                 reg_dw = self.regularization * self.w
             else:  # L1
                 reg_loss = self.regularization * np.sum(np.abs(self.w))
@@ -188,31 +188,8 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
         self.b = 0
         self.velocity_w = np.zeros_like(self.w)
         self.velocity_b = 0
-        
-    def _compute_relative_improvement(self, best_loss: float, val_loss: float) -> float:
-        """
-        Compute relative improvement with enhanced numerical stability.
-        
-        Args:
-            best_loss: Previous best validation loss
-            val_loss: Current validation loss
-            
-        Returns:
-            float: Relative improvement value
-        """
-        # Ensure inputs are finite and non-negative
-        if not (np.isfinite(best_loss) and np.isfinite(val_loss)):
-            return 0.0
-            
-        if best_loss < 0 or val_loss < 0:
-            return 0.0
-            
-        # Use max to ensure denominator is never too close to zero
-        denominator = max(abs(best_loss) + self.epsilon, self.epsilon)
-        
-        return (best_loss - val_loss) / denominator
 
-    def fit(self, X: Union[np.ndarray, list], y: Union[np.ndarray, list]) -> 'LinearRegressionScratch':
+    def fit(self, X: Union[np.ndarray, list], y: Union[np.ndarray, list]) -> 'LinearModel':
         """
         Fit the linear regression model using improved gradient descent.
         
@@ -296,21 +273,36 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
             self.val_history.append(val_loss)
             
             # Early stopping with improved relative improvement check
-            if val_loss < best_loss:
-                relative_improvement = self._compute_relative_improvement(best_loss, val_loss)
-                
-                if relative_improvement < self.tolerance:
-                    no_improvement_count += 1
-                else:
+            if val_loss < float('inf'):  # Ensure the loss is valid
+                if best_loss == float('inf'):
+                    # First valid loss, automatically consider it the best
                     best_loss = val_loss
                     no_improvement_count = 0
-            else:
-                no_improvement_count += 1
+                else:
+                    # Calculate relative improvement with better numerical stability
+                    relative_improvement = (best_loss - val_loss) / (abs(best_loss) + self.epsilon)
+                    
+                    if val_loss < best_loss:  # New best loss found
+                        if relative_improvement > self.tolerance:  # Significant improvement
+                            best_loss = val_loss
+                            no_improvement_count = 0
+                        else:  # Improvement too small to be significant
+                            no_improvement_count += 1
+                    else:  # Loss got worse
+                        no_improvement_count += 1
                 
-            if no_improvement_count >= self.patience:
+                # Check if we should stop
+                if no_improvement_count >= self.patience:
+                    if self.verbose > 0:
+                        print(f"Early stopping triggered at epoch {epoch + 1}. "
+                            f"No significant improvement for {self.patience} epochs. "
+                            f"Best loss: {best_loss:.6f}")
+                    break
+            else:
+                # Handle invalid loss (e.g., NaN or Inf)
                 if self.verbose > 0:
-                    print(f"Early stopping at epoch {epoch + 1}")
-                break
+                    print(f"Warning: Invalid loss value encountered at epoch {epoch + 1}")
+                no_improvement_count += 1
                 
             if self.verbose > 0 and epoch % self.verbose == 0:
                 print(f"Epoch {epoch + 1}, Training Loss: {avg_epoch_loss:.4f}, "
@@ -342,7 +334,6 @@ class LinearRegressionScratch(BaseEstimator, RegressorMixin):
             
         return np.dot(X, self.w) + self.b
 
-    
     def learning_curve(self, figsize: Tuple[int, int] = (10, 6)) -> None:
         """
         Plot the learning curves with improved visualization.
