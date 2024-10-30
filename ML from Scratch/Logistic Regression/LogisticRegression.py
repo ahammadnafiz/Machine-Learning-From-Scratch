@@ -58,7 +58,6 @@ class LogisticModel:
         clip_value: Optional[float] = None,
         random_state: Optional[int] = None,
         epsilon: float = 1e-8,
-        init_method: str = 'he'
     ):
         # Validate input parameters
         if learning_rate <= 0:
@@ -71,8 +70,6 @@ class LogisticModel:
             raise ValueError("Regularization type must be 'L1' or 'L2'")
         if decay_type not in ['exponential', 'inverse_time', 'adaptive']:
             raise ValueError("Decay type must be 'exponential', 'inverse_time', or 'adaptive'")
-        if init_method not in ['he', 'xavier']:
-            raise ValueError("Initialization method must be 'he' or 'xavier'")
             
         self.learning_rate = learning_rate
         self.initial_learning_rate = learning_rate
@@ -89,7 +86,6 @@ class LogisticModel:
         self.verbose = verbose
         self.clip_value = clip_value
         self.epsilon = epsilon
-        self.init_method = init_method
         
         if random_state is not None:
             np.random.seed(random_state)
@@ -116,13 +112,9 @@ class LogisticModel:
         return 1 / (1 + np.exp(-z))
     
     def _initialize_parameters(self, n_features: int) -> None:
-        """Initialize weights using He or Xavier initialization based on input size."""
-        if self.init_method == 'he':
-            # He initialization: sqrt(2/n_in)
-            scale = np.sqrt(2. / n_features)
-        else:
-            # Xavier initialization: sqrt(1/n_in)
-            scale = np.sqrt(1. / n_features)
+        """Initialize weights using Xavier initialization based on input size."""
+        # Xavier initialization: sqrt(1/n_in)
+        scale = np.sqrt(1. / n_features)
             
         self.weights = np.random.randn(n_features) * scale
         self.bias = 0
