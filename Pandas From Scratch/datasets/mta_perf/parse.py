@@ -1,16 +1,3 @@
-from pandas import DataFrame
-from lxml import objectify
-
-path = 'Performance_MNR.xml'
-parsed = objectify.parse(open(path))
-root = parsed.getroot()
-
-data = []
-
-for elt in root.INDICATOR:
-    el_data = {}
-    for child in elt.getchildren():
-        el_data[child.tag] = child.pyval
-    data.append(el_data)
-
-perf = DataFrame(data)
+version https://git-lfs.github.com/spec/v1
+oid sha256:eade80af4e3d56fe129321e75b50cf7beb97145f18909656a898385ada8ebf57
+size 329

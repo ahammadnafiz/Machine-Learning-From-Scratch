@@ -1,16 +1,3 @@
-Port Au Prince Roads
-
-Haiti
-
-Date:  13 Jan 2010 
-
-Source:  OpenStreetMap
-
-Processed by:  Delta State Univ
-
-Contact:  Talbot Brooks
-
-Packaged by:  CGA, Harvard Univ
-
-
-License and Copyright:  Released for non-commerical academic and rescue efforts.  Refer to Creator, OpenStreetMap for authorized use.   
+version https://git-lfs.github.com/spec/v1
+oid sha256:f58da60fcc96fac8ec1aabd04f78318c3db3bfddb9569cb054065980ed386aab
+size 317

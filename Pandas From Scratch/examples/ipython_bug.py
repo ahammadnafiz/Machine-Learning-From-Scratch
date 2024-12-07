@@ -1,15 +1,3 @@
-def works_fine():
-    a = 5
-    b = 6
-    assert(a + b == 11)
-
-def throws_an_exception():
-    a = 5
-    b = 6
-    assert(a + b == 10)
-
-def calling_things():
-    works_fine()
-    throws_an_exception()
-
-calling_things()
+version https://git-lfs.github.com/spec/v1
+oid sha256:d3ae40200e7dc65e5f4602b48727630fc2c730ffb7a82407c6c218d1b4da5f64
+size 218
